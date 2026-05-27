@@ -56,17 +56,21 @@ export const verifyAccount = async (req, res) => {
 };
 
 export const login = async (req, res) => {
-  const { email, password } = req.body;
-  const user = await prisma.user.findUnique({ where: { email } });
+  try {
+    const { email, password } = req.body;
+    const user = await prisma.user.findUnique({ where: { email } });
 
-  if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
-  if (!user.isVerified) return res.status(401).json({ message: "Debes verificar tu cuenta primero" });
+    if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
+    if (!user.isVerified) return res.status(401).json({ message: "Debes verificar tu cuenta primero" });
 
-  const validPassword = await bcrypt.compare(password, user.password);
-  if (!validPassword) return res.status(401).json({ message: "Contraseña incorrecta" });
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) return res.status(401).json({ message: "Contraseña incorrecta" });
 
-  const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET);
-  res.json({ token, user: { name: user.name, role: user.role } });
+    const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { name: `${user.firstName} ${user.lastName}`, role: user.role } });
+  } catch (error) {
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
 };
 
 export const forgotPassword = async (req, res) => {
@@ -105,8 +109,14 @@ export const resetPassword = async (req, res) => {
     const { token } = req.params;
     const { newPassword } = req.body;
 
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ error: "La contraseña debe tener al menos 8 caracteres" });
+    }
+
     const user = await prisma.user.findFirst({ where: { resetToken: token } });
-    if (!user) return res.status(400).json({ message: "El token es inválido o ha expirado" });
+    if (!user || user.resetTokenExpires < new Date()) {
+      return res.status(400).json({ message: "El token es inválido o ha expirado" });
+    }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
@@ -114,7 +124,8 @@ export const resetPassword = async (req, res) => {
       where: { id: user.id },
       data: { 
         password: hashedPassword,
-        resetToken: null
+        resetToken: null,
+        resetTokenExpires: null
       }
     });
 
@@ -123,6 +134,74 @@ export const resetPassword = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+export const updateProfile = async (req, res) => {
+  try {
+    const { firstName, lastName, learningStyle, currentSemester } = req.body;
+    const userId = req.user.id;
+
+    const data = {};
+    if (firstName !== undefined) data.firstName = firstName;
+    if (lastName !== undefined) data.lastName = lastName;
+    if (learningStyle !== undefined) data.learningStyle = learningStyle;
+    if (currentSemester !== undefined) data.currentSemester = currentSemester;
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        learningStyle: true,
+        currentSemester: true,
+        createdAt: true
+      }
+    });
+
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: "Error al actualizar el perfil" });
+  }
+};
+
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: "Todos los campos son obligatorios" });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: "La nueva contraseña debe tener al menos 8 caracteres" });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    const validPassword = await bcrypt.compare(currentPassword, user.password);
+    if (!validPassword) {
+      return res.status(401).json({ error: "La contraseña actual es incorrecta" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword }
+    });
+
+    res.json({ message: "Contraseña actualizada con éxito" });
+  } catch (error) {
+    res.status(500).json({ error: "Error al cambiar la contraseña" });
+  }
+};
+
 export const getProfile = async (req, res) => {
   try {
     const user = await prisma.user.findUnique({

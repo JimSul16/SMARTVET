@@ -11,8 +11,10 @@ const Register = () => {
   const navigate = useNavigate();
 
   const onSubmit = async (dataForm) => {
-    await fetchDataBackend("/auth/register", dataForm, "POST");
-    navigate("/login");
+    const result = await fetchDataBackend("/auth/register", dataForm, "POST");
+    if (result) {
+      navigate("/login");
+    }
   };
 
   return (

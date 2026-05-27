@@ -1,7 +1,4 @@
 import nodemailer from 'nodemailer';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -40,7 +37,7 @@ export const sendPasswordResetEmail = async (email, firstName, token) => {
   const resetLink = `${process.env.FRONTEND_URL}/reset-password/${token}`;
 
   const mailOptions = {
-    from: process.env.SMTP_USER,
+    from: `"Plataforma TSDS" <${process.env.SMTP_USER}>`,
     to: email,
     subject: 'Recuperación de Contraseña - TSDS ESFOT',
     html: `

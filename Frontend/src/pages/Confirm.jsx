@@ -14,7 +14,7 @@ const Confirm = () => {
     setLoading(true);
 
     try {
-      const response = await axios.get(`http://localhost:3000/api/auth/verify/${token}`);
+      const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/auth/verify/${token}`);
       setStatus('success');
       toast.success(response.data.message || 'Cuenta verificada correctamente');
       
